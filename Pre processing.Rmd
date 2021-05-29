@@ -1,0 +1,294 @@
+---
+title: "Pre-processing"
+author: "Mariana Saldarriaga and Ofer Dotan"
+date: "2021"
+output: html_document
+---
+
+# #Load libraries
+```{r packages, fig.show='hide', message=FALSE, warning=FALSE, include=FALSE, results='hide'}
+library(haven)
+library(caret)
+library(tidyverse) # remember includes dplyr
+library(labelled)
+library(gtools)
+library(car)
+library(dplyr)
+```
+
+# Load data and remove NAs
+```{r}
+ud <- read_dta("Uganda ELA Panel wide_Creation.dta", encoding = "latin1")
+ud <- remove_labels(ud)
+ud <- remove_attributes(ud, "format.stata")
+ud[is.na(ud)] = 88
+ud[ud == 88] <- NA
+ud <- as.data.frame(ud)
+```
+
+# Standardization variables 
+```{r}
+standardize <- function(data) {
+  mean_data <- mean(data, na.rm = TRUE)
+  sd_data <- sd(data, na.rm = TRUE)
+  stand_data <- (data - mean_data)/sd_data
+  return(stand_data)
+}
+
+ud$z_hsworked_year_empl <- standardize(ud$hsworked_year_empl)
+ud$z_hsworked_year_self <- standardize(ud$hsworked_year_self)
+ud$z_Qhsworked_year_empl <- standardize(ud$Qhsworked_year_empl)
+ud$z_Rhsworked_year_empl <- standardize(ud$Rhsworked_year_empl)
+ud$z_satisfaction_income <- standardize(ud$satisfaction_income) 
+ud$z_study_hours <- standardize(ud$study_hours) 
+ud$z_Qstudy_hours <- standardize(ud$Qstudy_hours) 
+ud$z_Rstudy_hours <- standardize(ud$Rstudy_hours) 
+ud$z_age_Imarry <- standardize(ud$age_Imarry) 
+ud$z_Rage_Imarry <- standardize(ud$Rage_Imarry) 
+ud$z_M_marrywho <- standardize(ud$M_marrywho)
+```
+
+# First subset - including endline and follow-up variables + indexes
+```{r pressure, echo=FALSE}
+ud_subset <- ud %>% 
+  subset(select = c("Expenditure_totDF", "QExpenditure_totDF", "RExpenditure_totDF", "HHAssetvalue_total", "z_Qhsworked_year_empl", "HHF_loanbrac", "HHM_whoshouldearn","M_ablework_if", "below16", "z_satisfaction_income", 
+                    "M_children", "M_marrywhen", "M_marrywho",
+                    "M_wanttowork_if","QC_clubheard","Qincome_year_ind", "Rincome_year_ind", 
+                    "QC_clubparticipateIMP", "QC_stillgoing", "QE_Denrolled", "Qage", 
+                    "Qback_school","Qhsworked_year_empl","Qhsworked_year_self", "Qincind_empl",
+                    "Qincind_selfempl", "Qincome_year_ind", "QlifeskillMOREfew",
+                    "QlifeskillMOREfewIMP","QlivelihoodMOREfew", "QlivelihoodMOREfewIMP", "Qoften1WEEK",
+                    "Qoften3WEEK", "z_hsworked_year_empl", "Qstudy_hours", "Qworry_job",
+                    "RC_clubheard","RC_clubparticipateIMP","RC_stillgoing","RE_Denrolled", 
+                    "Rage", "Rback_school", "Rhsworked_year_self", "Rhsworked_year_empl", "Rincind_empl",
+                    "Rincind_selfempl", "Rstudy_hours",
+                    "Rworry_job", "age", "back_school","baseline", "branch_name", "branchno",
+                    "dist_nearclub","endline", "follow_up", "hsworked_year_empl", "hsworked_year_self", "id",
+                    "idno","incind_empl","incind_selfempl","income_year_ind", "lifeskillMOREfew",
+                    "lifeskillMOREfewIMP","livelihoodMOREfew","livelihoodMOREfewIMP",
+                    "often1WEEK","often3WEEK", "satisfaction_income", "selfempl","study_hours",
+                    "treatment", "villid", "worry_job", "age_Imarry", "Rage_Imarry",          
+                    "rural", "rich","z_QEntrep_total", "z_Qany_iga", "z_Qselfempl",
+                    "z_Qempl","z_QExpenditure_totDF","QM_chi","Qpart", "z_QM_chi","z_Qpart","z_QR_sexu","z_Qsex_p",
+                    "z_QRhiv_s","z_Qalways_c", "z_Qother_c", "QM_baby_no",           
+                    "QM_son", "z_Qempowerment", "z_QM_i_ageF","z_QM_i_ageM","z_QM_baby_no","z_QM_baby_ageF",       
+                    "z_QM_daught","z_QM_son","Qcontrol_body","Qaspiration","Qiga","z_REntrep_total","z_Rany_iga",
+                   "z_Rempl", "z_RExpenditure_totDF", "RM_chi", "Rpart", "RR_sexu", "Ralways_c","Rother_c",
+                    "z_RM_chi", "z_Rpart", "z_RR_sexu", "z_Rsex_p", "z_RRhiv_s", "z_Ralways_c","z_Rother_c",
+                    "z_Rempowerment","z_RM_i_ageF","z_RM_i_ageM","z_RM_baby_no","z_RM_baby_ageF",
+                    "z_RM_daught","z_RM_son", "Rcontrol_body","Raspiration","Riga", "z_Entrep_total","z_any_iga",
+                    "z_selfempl","z_empl","z_Expenditure_totDF",
+                    "zALL_Entrep_total","zALL_any_iga","zALL_selfempl","zALL_empl",
+                    "zALL_Expenditure_totDF", "M_chi","part",                
+                    "always_c","other_c","z_M_chi",
+                    "z_part","z_R_sexu","z_sex_p","z_Rhiv_s","z_always_c","z_other_c","zALL_R_sexu",
+                    "zALL_sex_p","zALL_Rhiv_s","zALL_always_c","zALL_other_c",
+                    "z_empowerment","z_M_i_ageF","z_M_i_ageM","z_M_baby_no",
+                    "z_M_baby_ageF","z_M_daught","z_M_son","zALL_empowerment",
+                    "zALL_M_i_ageF","zALL_M_i_ageM", "z_hsworked_year_self",
+                    "zALL_M_baby_no","zALL_M_baby_ageF","zALL_M_daught","zALL_M_son","control_body","aspiration", 
+                    "iga","igaALL", "_Bbranch_na_2","_Bbranch_na_3","_Bbranch_na_4", "_Bbranch_na_5",
+                    "_Bbranch_na_6","_Bbranch_na_7","_Bbranch_na_8","_Bbranch_na_9", "_Bbranch_na_10", "Attitude",
+                    "E_Denrolled", "empl", "partner", "empowerment","Qempowerment","Rempowerment")
+         ) 
+```
+
+
+# Rename variables and keep only panel (baseline and follow-up)
+```{r}
+ud_subset <- ud_subset %>% 
+  rename(expenditure_goods = Expenditure_totDF,
+         foll_expend_goods = RExpenditure_totDF,
+         endline_expend_goods = QExpenditure_totDF,
+         endline_controlbody = Qcontrol_body,
+         endline_aspiration = Qaspiration,
+         endline_income_gen_act = Qiga,
+         endline_empowerment_stand = z_Qempowerment,
+         treatment = treatment, ## baseline
+         rich = rich, 
+         value_assets = HHAssetvalue_total, # not make assumption, model predict
+         below16 = below16, # transformation age
+         age = age, # keep original values; control in paper
+         branchno = branchno, # control in paper i.branch_name
+         rural = rural,
+         vill_id = villid, # cluster paper
+         want_respect = Attitude,
+         enroll_school = E_Denrolled,
+         back_school = back_school,
+         dist_nearclub = dist_nearclub,
+         empl = empl,
+         loan_brac = HHF_loanbrac, 
+         att_earn_moneyfam = HHM_whoshouldearn,
+         ablework_married = M_ablework_if,
+         who_decidehusband = M_marrywho, 
+         work_married = M_wanttowork_if, 
+         index_income_gen_act = iga, # z_Entrep_total,z_any_iga,z_selfempl,z_empl,z_Expenditure_totDF
+         index_aspiration = aspiration, # z_M_i_ageF,z_M_i_ageM,z_M_baby_no,z_M_baby_ageF,z_M_daught,z_M_son
+         index_controlbody = control_body, # z_M_chi,z_part,z_R_sexu,z_sex_p,z_Rhiv_s,z_always_c,z_other_c
+         children_stand = z_M_chi, # -M_children(reverse), standardize dummy --> M_chi # part control over body index
+         children = M_children,
+         partner = partner,
+         partner_stand = z_part, # -partner, standardize dummy -->part # part control over body index
+         sex_unwilling = z_R_sexu, # -R_sexunwilling, standardize dummy --> R_sexu # part control over body index
+         index_empowerment_stand = z_empowerment, # Not in aspiration index!!!!
+         index_empowerment = empowerment,
+         back_school = back_school, 
+         income = income_year_ind, # already trimmed
+         life_skills = lifeskillMOREfewIMP, 
+         livelihood = livelihoodMOREfewIMP,
+         club_sometimes = often1WEEK, 
+         club_frequently = often3WEEK,
+         satisf_income = satisfaction_income,
+         study_hours = study_hours, 
+         worry_job = worry_job, # we should inverse it 1 is not worry and this is bad, normally 1 is good
+         branch_name = branch_name, # paper uses i.branch_name as control variable --> base _Bbranch_na_1 #
+         endline_income = Qincome_year_ind, 
+         foll_income = Rincome_year_ind,
+         foll_club_heard = RC_clubheard, ## follow up
+         foll_club_part = RC_clubparticipateIMP, # imputed values
+         foll_still_goclub = RC_stillgoing,
+         foll_enroll_school = RE_Denrolled, 
+         foll_age = Rage,
+         foll_back_school = Rback_school,
+         foll_study_hours = Rstudy_hours,
+         foll_worry_job = Rworry_job,
+         foll_children = z_RM_chi, # standardize -RM_Children (dummy), # part control over body index
+         foll_partner = z_Rpart, # standardize -Rpartner (dummy) # part control over body index
+         foll_sex_unwilling = z_RR_sexu, # standardize -RR_sexunwilling (dummy) # part control over body index
+         foll_index_income_gen_act = Riga, # z_REntrep_total,z_Rany_iga,z_Rselfempl,z_Rempl,z_RExpenditure_totDF
+         foll_index_controlbody = Rcontrol_body, # z_RM_chi,z_Rpart,z_RR_sexu,z_Rsex_p,z_RRhiv_s,z_Ralways_c z_Rother_c
+         foll_index_aspiration = Raspiration, # z_RM_i_ageF,z_RM_i_ageM,z_RM_baby_no,z_RM_baby_ageF,z_RM_daught,z_RM_son
+         foll_index_empowerment_stand = z_Rempowerment, # Not in aspiration index!!!!
+         foll_index_empowerment = Rempowerment,
+         endline_empowerment = Qempowerment,
+         foll_expend_goods_stand = z_RExpenditure_totDF
+  )
+```
+
+# Final subset
+```{r}
+df.uganda <- as.data.frame(ud_subset) %>%
+  select(foll_expend_goods, endline_expend_goods, expenditure_goods, endline_income,foll_income, endline_controlbody,endline_aspiration,endline, index_empowerment_stand, endline_income_gen_act,endline_empowerment,baseline, value_assets, ablework_married, children, who_decidehusband, work_married, age, back_school, branch_name, branchno, dist_nearclub, follow_up, z_hsworked_year_self, z_hsworked_year_empl, id, income, life_skills, livelihood, club_sometimes, club_frequently, satisf_income, z_selfempl, study_hours, treatment, vill_id, worry_job, rural, rich, below16, sex_unwilling, foll_index_controlbody, foll_index_aspiration, foll_index_income_gen_act, z_Entrep_total, z_any_iga, z_empl, z_Expenditure_totDF, partner, empl, index_empowerment, index_controlbody, index_aspiration, index_income_gen_act, want_respect, enroll_school, foll_expend_goods_stand, foll_index_empowerment_stand, foll_index_empowerment, endline_empowerment, endline_empowerment_stand, "_Bbranch_na_2", "_Bbranch_na_3", "_Bbranch_na_4", "_Bbranch_na_5", "_Bbranch_na_6", "_Bbranch_na_7", "_Bbranch_na_8", "_Bbranch_na_9", "_Bbranch_na_10")
+
+```
+
+# Means outcomes (follow-up and endline)
+```{r}
+df.uganda$post_income_gen_act <- rowMeans(df.uganda[,c("endline_income_gen_act", "foll_index_income_gen_act")], na.rm=TRUE)
+
+df.uganda$post_income_gen_act_max <- pmax(df.uganda$endline_income_gen_act, df.uganda$foll_index_income_gen_act, na.rm = TRUE)
+                                    
+df.uganda$post_control_body <- rowMeans(df.uganda[,c("endline_controlbody", "foll_index_controlbody")], na.rm = TRUE)
+
+df.uganda$post_control_body_max <- pmax(df.uganda$endline_controlbody, df.uganda$foll_index_controlbody, na.rm = TRUE)
+
+df.uganda$post_empowerment <- rowMeans(df.uganda[,c("endline_empowerment", "foll_index_empowerment")], na.rm = TRUE)
+  
+df.uganda$post_empowerment_max <- pmax(df.uganda$endline_empowerment, df.uganda$foll_index_empowerment, na.rm = TRUE)
+
+df.uganda$post_aspirations <- rowMeans(df.uganda[,c("endline_aspiration", "foll_index_aspiration")], na.rm = TRUE)
+
+df.uganda$post_aspirations_max <- pmax(df.uganda$endline_aspiration, df.uganda$foll_index_aspiration, na.rm = TRUE)
+
+df.uganda$post_income <- rowMeans(df.uganda[,c("endline_income", "foll_income")], na.rm = TRUE)
+
+df.uganda$post_income_max <- pmax(df.uganda$endline_income, df.uganda$foll_income, na.rm = TRUE)
+
+df.uganda$post_expend <- rowMeans(df.uganda[,c("endline_expend_goods", "foll_expend_goods")], na.rm = TRUE)
+```
+
+# Create a factor variable using the quantiles of continuous variables
+```{r}
+df.uganda$age_quant <- quantcut(df.uganda$age, q=3, na.rm=TRUE)
+#df.uganda$income_quant <- quantcut(df.uganda$income, q=3, na.rm=TRUE, names = TRUE) #not working
+df.uganda$study_hours_quant <- quantcut(df.uganda$study_hours, q=3, na.rm=TRUE)
+df.uganda$index_aspiration_quant <- quantcut(df.uganda$index_aspiration, q=4, na.rm=TRUE)
+df.uganda$index_iga_quant <- quantcut(df.uganda$index_income_gen_act, q=4, na.rm=TRUE)
+df.uganda$index_empowerment_quant <- quantcut(df.uganda$index_empowerment, q=3, na.rm=TRUE)
+df.uganda$index_controlbody_quant <- quantcut(df.uganda$index_controlbody, q=3, na.rm=TRUE)
+df.uganda$expend_quant <- quantcut(df.uganda$expenditure_goods, q=3, na.rm=TRUE)
+```
+
+# Recode categorical variables as dummies
+```{r}
+# Dummy now - we need to specify this was recoded; any level of satisfaction coded as satisfied)
+df.uganda$satisf_income <- car::recode(df.uganda$satisf_income, "c('0') = '0'; c('1','2','3','4','5','6')='1'")
+
+# Recoded taking 1:5 (354 obs) doesn't want respect and 6:10 (5516) does want respect 
+df.uganda$want_respect <- car::recode(df.uganda$want_respect, "c('1','2','3','4','5') = '0'; c('6','7','8','9','10') ='1'")
+```
+
+# Clean data set
+```{r}
+df.uganda <- df.uganda %>% 
+ mutate(branchno = as.factor(branchno),
+        treatment = as.factor(treatment),
+        value_assets = as.numeric(value_assets),
+        work_married = as.factor(work_married),
+        enroll_school = as.factor(enroll_school),
+        age = as.numeric(age),
+        who_decidehusband = as.factor(who_decidehusband),
+        children = as.factor(children),
+        back_school = as.factor(back_school),
+        branchno = as.factor(branchno),
+        dist_nearclub = as.numeric(dist_nearclub),
+        z_hsworked_year_empl = as.numeric(z_hsworked_year_empl),
+        z_hsworked_year_self = as.numeric(z_hsworked_year_self),
+        income = as.numeric(income),
+        study_hours = as.numeric(study_hours),
+        rich = as.factor(rich),
+        below16 = as.factor(below16),
+        foll_expend_goods = as.numeric(foll_expend_goods),
+        endline_expend_goods = as.numeric(endline_expend_goods),
+        expenditure_goods = as.numeric(expenditure_goods),
+        foll_expend_goods_stand = as.numeric(foll_expend_goods_stand),
+        foll_index_empowerment = as.numeric(foll_index_empowerment),
+        foll_index_empowerment_stand = as.numeric(foll_index_empowerment_stand),
+        foll_index_controlbody = as.numeric(foll_index_controlbody), 
+        foll_index_aspiration = as.numeric(foll_index_aspiration),
+        foll_index_income_gen_act = as.numeric(foll_index_income_gen_act),
+        ablework_married = as.factor(ablework_married),
+        satisf_income = as.factor(satisf_income),
+        life_skills = as.factor(life_skills),
+        club_sometimes = as.factor(club_sometimes),
+        club_frequently =as.factor(club_frequently),
+        livelihood = as.factor(livelihood),
+        vill_id = as.factor(vill_id),
+        rural = as.factor(rural),
+        treatment = as.factor(treatment),
+        worry_job = as.factor(worry_job),
+        z_Entrep_total = as.numeric(z_Entrep_total),
+        sex_unwilling = as.factor(sex_unwilling),
+        index_empowerment = as.numeric(index_empowerment),
+        z_any_iga = as.factor(z_any_iga),
+        z_empl = as.factor(z_empl),
+        z_selfempl = as.factor(z_selfempl),
+        z_Expenditure_totDF = as.numeric(z_Expenditure_totDF),
+        partner = as.factor(partner),
+        index_controlbody = as.numeric(index_controlbody),
+        index_aspiration = as.numeric(index_aspiration),
+        index_income_gen_act = as.numeric(index_income_gen_act),
+        want_respect = as.factor(want_respect),
+        enroll_school = as.factor(enroll_school),
+        branch_name = as.factor(branch_name),
+        age_quant = as.factor(age_quant),
+        index_aspiration_quant = as.factor(index_aspiration_quant),
+        index_iga_quant = as.factor(index_iga_quant),
+        index_empowerment_quant = as.factor(index_empowerment_quant),
+        index_controlbody_quant = as.factor(index_controlbody_quant),
+        empl = as.factor(empl), 
+        study_hours_quant = as.factor(study_hours_quant), 
+        expend_quant = as.factor(expend_quant)
+        )
+
+```
+
+# NAs
+```{r}
+df.uganda[df.uganda == NaN] <- NA
+```
+
+# Save final data
+```{r}
+save(df.uganda, file = "df.uganda.RData")
+```

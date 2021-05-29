@@ -1,0 +1,372 @@
+---
+title: "Causal Random Forest. Outcome: Control Over Body"
+author: "Ofer Dotan and Mariana Saldarriaga"
+date: "2021"
+output: html_document
+---
+
+
+# Install packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+```{r packages, fig.show='hide', message=FALSE, warning=FALSE, include=FALSE, results='hide'}
+library(grf)
+library(haven)
+library(caret)
+library(tidyverse) 
+library(expss)
+library(base)
+library(readr)
+library(stats)
+library(knitr)
+library(kableExtra)
+library(aod)
+```
+
+# Load data
+```{r}
+load("df.uganda.RData")
+```
+
+```{r}
+set.seed(1236)
+options(na.action = 'na.pass')
+```
+
+# Keep complete cases in outcome
+```{r}
+df.uganda <- as.data.frame(df.uganda) %>%
+  filter(complete.cases(vill_id,
+                        foll_index_controlbody))
+```
+
+# Generate X(covariates), Y(outcome), W (treatment), C(cluster) matrixes
+```{r, include=FALSE}
+Y.outcome <- as.matrix(df.uganda$foll_index_controlbody)
+
+#Baseline variables
+X.vars <- stats::model.matrix(~ children + 
+                            branchno + 
+                            age_quant + 
+                            rural + 
+                            rich+
+                            club_frequently + 
+                            expend_quant +
+                            club_sometimes + 
+                            partner +
+                            empl+
+                            enroll_school + 
+                            study_hours_quant +
+                            worry_job +
+                            work_married+
+                            ablework_married+
+                            want_respect+
+                            who_decidehusband+
+                            index_aspiration_quant+
+                            index_iga_quant+
+                            index_empowerment_quant+
+                            satisf_income,
+                            data= df.uganda)
+
+#Cluster
+C.vill.id <- as.numeric(df.uganda$vill_id)
+
+#Treatment assignment
+W.treatment <- as.numeric(levels(df.uganda$treatment)[as.integer(df.uganda$treatment)])
+```
+
+# Estimate expected responses(Y.hat) and treatment propensities(W.hat) with regression forests
+```{r}
+Y.forest <- regression_forest(X.vars, 
+                             Y.outcome, 
+                             clusters = C.vill.id, 
+                             equalize.cluster.weights = TRUE)
+Y.hat <- predict(Y.forest)$predictions
+
+W.forest <- regression_forest(X.vars, 
+                             W.treatment, 
+                             clusters = C.vill.id,
+                             equalize.cluster.weights = TRUE)
+W.hat <- predict(W.forest)$predictions
+```
+
+# Train raw causal forest (no important variable selection)
+```{r}
+cf.raw = causal_forest (X.vars, 
+                        Y.outcome, 
+                        W.treatment,
+                        num.trees = 20000,
+                        Y.hat = Y.hat, 
+                        W.hat = W.hat,
+                        clusters = C.vill.id,
+                        equalize.cluster.weights = TRUE,
+                        tune.parameters = "all",
+                        orthog.boosting = TRUE,
+                        honesty = TRUE)
+```
+
+# Find important variables and plot them
+```{r causal_forest_varimp_table, results="asis", message=FALSE, echo=FALSE}
+var_imp <- variable_importance(cf.raw)
+selected.idx <- which(var_imp > mean(var_imp))
+
+#Table variable importance
+names <- colnames(X.vars[,selected.idx])
+sort_var_imp <- sort(selected.idx, decreasing=TRUE) 
+TableE.3 <-  as.data.frame(sort_var_imp, row.names = names) %>%  # names no value var_imp!!!
+knitr::kable("html", digits = 4, row.names = TRUE, caption = "Table E.3: List of Selected Variables. Outcome: Control Over Body")  %>% kable_classic("hover", full_width = T, html_font = "\"Times New Roman\"") %>% kable_styling(bootstrap_options=c("striped", "hover", "condensed","responsive"), full_width=FALSE)%>% footnote("Causal forest determines variable importance by a weighted sum capturing the number of splits a feature had in every depth layer in the model. Presented in descending order are variables that were above the mean weight of all the variables used for splitting in the model. 'c.") 
+
+save_kable(TableE.3, "TableE.3.png")
+TableE.3
+```
+
+# Train a second causal forest using only important variables index
+```{r}
+cf <- causal_forest(X.vars[,selected.idx], 
+                      Y.outcome, W.treatment, 
+                      Y.hat = Y.hat, 
+                      W.hat = W.hat, 
+                      num.trees = 20000,
+                      clusters = C.vill.id,  
+                      orthog.boosting = TRUE,
+                      equalize.cluster.weights = TRUE,
+                      tune.parameters = "all",
+                      honesty= TRUE)
+```
+
+# Estimate ATE for cf model with important variables
+```{r}
+# Average treatment effect for the model with important variables
+ATE.COB <- as.data.frame(average_treatment_effect(cf))
+ATE.COB
+
+saveRDS(ATE.COB, file = "ATE.COB.rds")
+```
+
+# Estimate treatment effects (tau.hat --> Athey CATE) using out-of-bag prediction 
+```{r}
+tau.hat <- predict(cf, num.trees = 20000, estimate.variance = TRUE)
+
+#Histogram
+tau.hat.hist <- ggplot(tau.hat, aes(predictions)) + geom_histogram(color="#52854C", fill="#52854C", alpha=.4, bins = 35)
+
+tau.hat.hist +
+  labs (title = "Figure 3: Histogram of out-of-bag CATE predictions from trained causal forest",
+        subtitle = "Outcome: Control Over Body (index composed by standardized variables)",
+        caption = "Note. Predictions made on held-out data from the full sample that was not used for training.") + ylab("Frequency") +xlab("Predictions CATE ") + theme_linedraw() +
+  theme(plot.caption = element_text(hjust = 0)) +
+  scale_x_continuous(limits = c(0, 1)) + scale_y_continuous(limits = c(0, 1600))
+```
+
+# Estimate CATE and plot estimations
+```{r}
+
+source("get_plot_data.R")
+
+X.vars.cate <- df.uganda %>% select(Age = age_quant,
+                                     Children = children,
+                                     Partner = partner,
+                                     COB = index_controlbody_quant,
+                                     Empowerment = index_empowerment_quant,
+                                     Rich = rich,
+                                     Rural = rural,
+                                     "Sarisfied income" = satisf_income,
+                                     "Enrolled school" = enroll_school,
+                                     "Study hours" = study_hours_quant)
+
+PLOT_DATA <- get_plot_data(cf, X.vars.cate)
+
+# visualize these
+plot.cates <- ggplot(PLOT_DATA, aes(x = level, y = estimate, colour = name)) + 
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = .2) +
+  geom_hline(yintercept = 0, linetype = 3) +
+  theme_light() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    strip.text.y = element_text(colour = "black"),
+    strip.background = element_rect(colour = NA, fill = NA),
+    legend.position = "none"
+    ) + 
+  facet_grid(name ~ ., scales = "free_y") +
+  coord_flip() +
+  scale_y_continuous(name="Estimate CATE by Subgroups: 95% confidence intervals", limits=c(-1,1))
+
+plot.cates+ggtitle("Heterogeneity Across Covariates", subtitle = "Outcome: COB")
+```
+
+# Heterogeneity across subgroups
+```{r  causal_forest_subgroup_het1}
+# Manually creating subgroups n-tiles
+num_tiles <- 3  # ntiles = CATE is above / below the median
+df.uganda$cate <- tau.hat$predictions
+df.uganda$ntile <- factor(ntile(tau.hat$predictions, n=num_tiles))
+```
+
+```{r sample_ate}
+# Average treatment effects within subgroups
+ols_sample_ate <- lm("Y.outcome ~ ntile + ntile:W.treatment", data=df.uganda)
+estimated_sample_ate <- coef(summary(ols_sample_ate))[(num_tiles+1):(2*num_tiles), c("Estimate", "Std. Error")]
+hypothesis_sample_ate <- paste0("ntile1:W.treatment = ", paste0("ntile", seq(2, num_tiles), ":W.treatment"))
+ftest_pvalue_sample_ate <- linearHypothesis(ols_sample_ate, hypothesis_sample_ate)[2,"Pr(>F)"]
+```
+
+```{r  ate_combined_table, results="asis", message=FALSE, echo=FALSE}
+# Round the estimates and standard errors before displaying them
+estimated_sample_ate_rounded <- round(signif(estimated_sample_ate, digits = 6), 6)
+
+# Format Table: Parenthesis, row/column names
+sample_ate_w_se <- c(rbind(estimated_sample_ate_rounded[,"Estimate"], paste0("(", estimated_sample_ate_rounded[,"Std. Error"], ")")))
+
+table <- cbind("Sample ATE" = sample_ate_w_se)
+
+table <- rbind(table, round(signif(c(ftest_pvalue_sample_ate), digits = 5), 4)) # add p-value to table
+left_column <- rep('', nrow(table))
+left_column[seq(1, nrow(table), 2)] <-
+    cell_spec(c(paste0("ntile", seq(num_tiles)), "P-Value"),
+              format = "html", escape = FALSE, color = "black", bold = TRUE)
+table <- cbind(" " = left_column, table)
+
+# Output table
+table %>%
+  kable("html", escape = FALSE, row.names = FALSE, caption = "Table G.3: Estimated CATE by Ntiles. Outcome: Control Over Body") %>%
+  kable_styling(bootstrap_options=c("striped", "hover", "condensed", "responsive"), full_width=FALSE) %>%
+  footnote(general = "Average treatment effects per subgroup (ntile) defined by out-of-bag CATE.<br>
+           P-value is testing <i>H<sub>0</sub>: ATE is constant across ntiles</i>.<br>
+           Sample ATE uses an F-test. For full description of outcome see Table 1. Methodology chapter.",
+           escape=FALSE)
+```
+
+```{r ate_combined_plot, echo=FALSE, results='as_is', fig.height=4}
+# Transform to data tables with relevant columns
+estimated_sample_ate <- as.data.frame(estimated_sample_ate)
+estimated_sample_ate$Method <- "Sample ATE"
+estimated_sample_ate$Ntile <- as.numeric(sub(".*([0-9]+).*", "\\1", rownames(estimated_sample_ate)))
+
+colnames(estimated_sample_ate) <- c("Estimate", "SE", "Method", "Ntile")
+
+# plot
+ggplot(estimated_sample_ate) +
+  geom_pointrange(aes(x = Ntile,
+                      y = Estimate,
+                      ymax = Estimate + 1.96 * SE,
+                      ymin = Estimate - 1.96 * SE,
+                      color = Method), 
+                  size = 0.5,
+                  position = position_dodge(width = .5)) +
+  geom_errorbar(aes(x = Ntile, ymax = Estimate + 1.96 * SE,
+                    ymin = Estimate - 1.96 * SE, color = Method),
+                width = 0.4,
+                size = 0.75,
+                position = position_dodge(width = .5)) +
+  theme_minimal() +
+  labs(x = "N-tile",
+       y = "ATE Estimate",
+       title = "ATE within N-tiles (as defined by predicted CATE)",
+       subtitle = "Outcome: Control Over Body",
+       caption = "Note. 95% CI")
+```
+
+```{r pairwise_ntile_ate_test, results='hide', message=FALSE, echo=TRUE, warning=FALSE, error=FALSE}
+p_values_tile_by_tile <- matrix(nrow = num_tiles, ncol = num_tiles)
+differences_tile_by_tile <- matrix(nrow = num_tiles, ncol = num_tiles)
+stderror_tile_by_tile <- matrix(nrow = num_tiles, ncol = num_tiles)
+hypotheses_grid <- combn(1:num_tiles, 2)
+
+invisible(apply(hypotheses_grid, 2, function(x) {
+  .diff <- with(estimated_sample_ate, Estimate[Ntile == x[2]] - Estimate[Ntile == x[1]])
+  .se <- with(estimated_sample_ate, sqrt(SE[Ntile == x[2]]^2 + SE[Ntile == x[1]]^2))
+
+  differences_tile_by_tile[x[2], x[1]] <<- .diff
+  stderror_tile_by_tile[x[2], x[1]] <<- .se
+  p_values_tile_by_tile[x[2], x[1]] <<- 1 - pnorm(abs(.diff/.se)) + pnorm(-abs(.diff/.se))
+}))
+```
+
+```{r echo=FALSE, results='asis'}
+# Little trick to display p-values under mean difference values in HTML
+diffs <- matrix(nrow = num_tiles, ncol = num_tiles)
+invisible(apply(hypotheses_grid, 2, function(x) {
+  d <- differences_tile_by_tile[x[2], x[1]]
+  s <- stderror_tile_by_tile[x[2], x[1]]
+  p <- p_values_tile_by_tile[x[2], x[1]]
+  top <- cell_spec(round(d, 3), "html",
+            background=case_when(is.na(p) || (p > 0.05) ~ "white",
+                                 p >= 0.1               ~ "gray",
+                                 TRUE                   ~ "black"),
+            color=ifelse(is.na(p), "white", ifelse(p < 0.1, "white", "gray")))
+  value <- ifelse(is.na(p), "", paste0(top, " <br> ", "(", round(s, 3), ")"))
+  diffs[x[2], x[1]] <<- value
+}))
+
+diffs <- as.data.frame(diffs) %>% mutate_all(as.character)
+rownames(diffs) <- paste0("tile", 1:num_tiles)
+colnames(diffs) <- paste0("tile", 1:num_tiles)
+
+# Title of table
+caption <- "Pairwise n-tile differences:<br>
+ATE differences between tile 1 and tile 3"
+
+# Styling color and background
+color <-function(x) ifelse(is.na(x), "white", "gray")
+
+diffs %>%
+  rownames_to_column() %>%
+  mutate_all(function(x) cell_spec(x, "html", escape=FALSE, color=color(x))) %>%
+  kable(format="html", caption=caption, escape = FALSE) %>%
+  kable_styling(bootstrap_options=c("condensed", "responsive"), full_width=FALSE) %>%
+  footnote(general='Standard errors in parenthesis. Significance:
+<ul>
+  <li>No background color: p ≥ 0.05
+  <li><span style="color: white;border-radius: 4px; padding-right: 4px; padding-left: 4px; background-color: gray;">Gray</span> background: p < 0.05
+  <li><span style="color: white;border-radius: 4px; padding-right: 4px; padding-left: 4px; background-color: black;">Black</span> background: p < 0.01
+</ul>
+', escape=F)
+```
+
+# Diagnostics Causal Forest
+
+## Best linear predictor analysis to understand if the model detects heterogeneity
+```{r}
+test_calibration(cf)
+```
+
+## Validating the overlap assumption 
+```{r}
+propensity.forest <- regression_forest(X.vars[,selected.idx], W.treatment)
+W.hat.p <- predict(propensity.forest)
+
+overlap <- ggplot(W.hat.p, aes(predictions)) + geom_histogram(color="#00AFBB", fill="#00AFBB", alpha=.4, bins=35)
+
+overlap+labs(title = "Control Over Body",
+              subtitle = "Assumption holds if observations are bounded away from 0 and 1")+
+   ylab("Predictions") + xlab("Propensity score") + theme_linedraw() + scale_x_continuous(limits = c(0,1))
+```
+
+## Estimate standard errors for test data and plot them
+```{r}
+standard.error = sqrt(tau.hat$variance.estimates) # This is the sigma part
+hist(standard.error, col = "#00AFBB", main = "Histogram of estimated standard error of causal forest", sub = "Outcome: Control Over Body", xlab="Standard error", xlim = c(0, 0.4), ylim = c(0,1500))
+```
+
+## Estimate model bias
+```{r}
+p <- mean(W.treatment)
+Y.hat.0 <- cf$Y.hat - W.hat * tau.hat
+Y.hat.1 <- cf$Y.hat + (1 - W.hat) * tau.hat
+bias <- (W.hat - p) * (p * (Y.hat.0 - mean(Y.hat.0))  + (1 - p) * (Y.hat.1 - mean(Y.hat.1)))
+hist(bias$variance.estimates / sd(Y.outcome), col = "#00AFBB", main = "Model bias", sub = "Outcome: Control Over Body", xlab = "bias/sd(Y)", xlim = c(-0.05, 0.1), ylim = c(0,1500))
+```
+
+## Causal Forest Predictions
+```{r causal_forest_oob_pred_table, results="asis", message=FALSE, echo=FALSE}
+# The first few rows of the cf output look like this...
+kable_styling(kable(head(tau.hat, 3), "html", digits = 4),
+              bootstrap_options=c("striped", "hover", "condensed", "responsive"),
+              full_width=FALSE)
+```
+

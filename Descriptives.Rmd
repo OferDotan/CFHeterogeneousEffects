@@ -1,0 +1,142 @@
+---
+title: "Descriptives"
+author: "Mariana Saldarriaga and Ofer Dotan"
+date: "2021"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(stargazer)
+library(AER)
+library(broom)
+library(knitr)
+library(ivpack)
+library(haven)
+library(caret)
+library(tidyverse) 
+library(expss)
+library(base)
+library(readr)
+library(stats)
+library(kableExtra)
+library(Amelia)
+library(gtools)
+```
+
+```{r, results = 'asis'}
+load("df.uganda.RData")
+```
+
+# Summary statistics - Continuous variables
+```{r, results = 'asis'}
+subset_descriptives_treat <- df.uganda %>% 
+  subset(treatment==1)
+
+subset_descriptives_control <- df.uganda %>% 
+  subset(treatment==0)
+
+subset_descriptives_treat <- subset_descriptives_treat %>% 
+  select(age, study_hours, expenditure_goods, index_empowerment,
+         index_controlbody, index_income_gen_act, index_aspiration)
+
+subset_descriptives_control <- subset_descriptives_control %>% 
+  select(age, study_hours, expenditure_goods, index_empowerment,
+         index_controlbody, index_income_gen_act, index_aspiration)
+
+# Summary Stats 
+Table_ss <- stargazer(as.data.frame(subset_descriptives_control),
+                      summary.stat = c("mean", "sd", "n"),
+                      type = "text",
+                      # title = "Baseline descriptive statistics of adolescent Girls according to status (left-control; right-treatment)",
+                      column.labels = c("Variables", "Mean", "St. Dev.", "N"),
+                      row.labels = c("Age", "Study Hours", "Expenditure on Goods", "Gender Empowerment", "Control Over Body", "Income Generating Activity", "Aspirations"),
+                      # notes = "Descriptive statistics of continuous baseline variables used in the causal forest. This table presents a description of the original variables, and not the recodified one into quantiles. The indexes: IGA, COB, and Aspirations are composed of several standardized variables. The outcome Expenditure refers to consumption of goods in several goods categories. The variable is measured in UGX currency. Exchange rate was 1,700UGX/1$. The Gender Empowerment index cummulates answers regarding gender roles and the index Control Over Body represents the extent of reproductive health literacy and family planning attitudes. See Table 1. for full specification of the outcomes.", 
+                      align = TRUE)
+
+Table_ss <- stargazer(as.data.frame(subset_descriptives_treat),
+                      summary.stat = c("mean", "sd", "n"),
+                      type = "text",
+                      # title = "Baseline descriptive statistics of adolescent Girls according to status (left-control; right-treatment)",
+                      column.labels = c("Variables", "Mean", "St. Dev.", "N"),
+                      covariate.labels = c("Age", "Study Hours", "Expenditure on Goods", "Gender Empowerment", "Control Over Body", "Income Generating Activity", "Aspirations"),
+                      notes = "Note. Descriptive statistics of continuous baseline variables used in the causal forest. This table presents a description of the original variables, and not the recodified one into quantiles. The indexes: IGA, COB, and Aspirations are composed of several standardized variables. The outcome Expenditure refers to consumption of goods in several goods categories. The variable is measured in UGX currency. Exchange rate was 1,700UGX/1$. The Gender Empowerment index cummulates answers regarding gender roles and the index Control Over Body represents the extent of reproductive health literacy and family planning attitudes. See Table 1. for full specification of the outcomes.", 
+                      align = TRUE)
+```
+
+# Summary statistics - discrete variables
+```{r}
+trt <- df.uganda%>% count(df.uganda$treatment==1)
+
+desc.children <- xtabs(~treatment + children, data= df.uganda) 
+desc.partner <- xtabs(~treatment + partner, data= df.uganda) 
+desc.rural <- xtabs(~treatment + rural, data= df.uganda)
+desc.age <- xtabs(~treatment + age_quant, data= df.uganda)
+desc.study <- xtabs(~treatment + study_hours_quant, data= df.uganda) 
+desc.enrolled <- xtabs(~treatment + enroll_school, data= df.uganda)
+desc.rich <- xtabs(~treatment + rich, data= df.uganda)
+desc.satisf.incm <- xtabs(~treatment + satisf_income, data= df.uganda)
+desc.empl <- xtabs(~treatment + empl, data= df.uganda)
+desc.empower <- xtabs(~treatment + index_empowerment_quant, data= df.uganda)
+desc.iga <- xtabs(~treatment + index_iga_quant, data= df.uganda)
+desc.aspirations <- xtabs(~treatment + index_aspiration_quant, data= df.uganda)
+desc.cob <- xtabs(~treatment + index_controlbody_quant, data= df.uganda)
+df.uganda$expend_quant <- quantcut(df.uganda$expenditure_goods, q=3, na.rm=TRUE)
+desc.expend <- xtabs(~treatment + expend_quant, data= df.uganda)
+
+subgroups <- cbind(desc.children, desc.partner, desc.rural, desc.age, desc.study,desc.enrolled, desc.rich, desc.satisf.incm, desc.empl)
+subgroups1 <- cbind(desc.expend,desc.empower, desc.aspirations, desc.cob)
+
+kable(subgroups) %>% kable_classic() %>% kable_styling("striped", full_width = T,
+                position = "left", font_size = 10) %>% add_header_above(c("Treatment status"=1,"Children" = 2, "Partner" = 2, "Rural" = 2, "Age" = 3, "Study hours"=4, "Enrolled school"=2, "Rich"=2, "Satisfied income"=2, "Employed"=2)) %>% column_spec(c(1, 3,5,7,10,14,16,18,20,22), border_right = TRUE, color = "black") 
+
+kable(subgroups1) %>% kable_classic() %>% kable_styling("striped", full_width = T,
+                position = "left", font_size = 10) %>% add_header_above(c("Treatment status"=1,"Expenditure"=3,"Empowerment"=3, "Control over body"=3, "Aspirations"=4)) %>% column_spec(c(1, 4,7,10,14), border_right = TRUE, color = "black") %>% footnote("Number of observations depending on treatment status. Sample size is 5,966. Variable specifications: Children: 1 if has children, Partner: 1 if has a partner, Rural: 1 if from a rural area, Enrolled school: 1 if enrolled, Rich: 1 if income above mean, Satisfied income: 1 if any level of satisfaction, 0 if not satisfied, Employed: 1 if employed. The Expenditure refers to monthly consumption of goods in several goods categories. The variable is measured in UGX currency. Exchange rate was 1,700UGX/1$. The Gender Empowerment index (rescaled from 0 to 100) is based on multiple questions relating to gender roles in labor markets, education and household chores. Higher values indicate more empowerment. The index Control Over Body is composed of answers to questinos measuring the extent of reproductive health literacy and family planning attitudes. Higher values indicate better control over body. The Aspirations index is composed by standardised variables measuring opinions about marriage and childbearing. Higher values indicate less traditional social norms. Here, continuous variables were recodified into discrete variables. See Table 1 for full specification of the variables.")
+```
+
+# Ttest on outcomes
+```{r}
+ttest <- df.uganda %>% 
+  select(treatment,
+         foll_expend_goods,
+         foll_index_empowerment,
+         foll_index_controlbody) %>%
+  gather("variable", 
+         "value", 
+         foll_expend_goods:foll_index_controlbody) %>% 
+  group_by(variable) %>%
+  do(tidy(t.test(value ~ treatment,
+             data = ., 
+             na.pass = TRUE ,
+             var.equal = TRUE))) %>% 
+  ungroup() %>%
+  mutate(estimate = estimate2 - estimate1) %>% # treatment effect
+  mutate(estimate = round(estimate, 2)) %>% # for ttest values
+  mutate(p.value = format(round(p.value, 2), nsmall = 2)) %>% #
+  mutate(variable = case_when(variable == "foll_expend_goods" ~ "Expenditures",
+                              variable == "foll_index_empowerment" ~ "Gender Empowerment",
+                              variable == "foll_index_controlbody" ~ "Control over body")) 
+colnames(ttest) <- c("Variable", "Means difference", "Control mean", "Treatment mean", "Statistics", "P-value" )
+
+  
+# Output table
+Table_ttest<- ttest[,1:6] %>%
+  kable("html", digits = 2, escape = FALSE, row.names = FALSE) %>%
+  kable_styling(bootstrap_options=c("striped", "hover", "condensed", "responsive"), full_width=FALSE) %>%
+  kable_classic("hover", full_width = T, html_font = "\"Times New Roman\"") %>%
+  footnote(general = "Ttest of the difference in means between treatment and control groups on the full sample. The outcomes were measured with two years follow-up. Signicance at 95%. The outcome Expenditure refers to consumption of goods in several goods categories. The variable is measured in UGX currency. Exchange rate was 1,700UGX/1$. The Gender Empowerment index cummulates answers regarding gender roles and the index Control Over Body represents the extent of reproductive health literacy and family planning attitudes. See Table 1. for full specification of the outcomes.",
+           escape=FALSE)
+Table_ttest
+```
+
+# Missings in data set
+```{r}
+missmap(df.uganda)
+```
+
+# Causal Forest Descriptives
+```{r}
+best_linear_projection(cf)
+plot(get_tree(cf, 4))
+```
+
+

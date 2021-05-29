@@ -1,0 +1,492 @@
+---
+title: "Survey Analysis"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r, echo=FALSE, fig.show='hide', message=FALSE, warning=FALSE, include=FALSE, results='hide'}
+library(tidyverse)
+library(readxl)
+library(ggpubr)
+library(gridExtra)
+```
+
+Data
+```{r, echo=FALSE}
+surveydata <- read_excel("SurveyReport-1602709672-03-23-2021-T022402 copy.xlsx", 
+    sheet = "Raw Data",
+    col_names = c("Response ID", 
+        "Response Status", "IP Address", "Timestamp (mm/dd/yyyy)", "Duplicate", "Time Taken to Complete (Seconds)", 
+        "Seq. Number", "Country Code", "Region", "Dear Expert", "Please read", 
+        "The program", "The program", "Econ.Married or cohabitating", "Econ.Has one or more children", "Econ.Lives in a rural area", 
+        "Econ.Enrolled in school", "Econ.Subjectively satisfied with her earnings", "Econ.Older than 16 when program starts", "Econ.Attends school regularly", "Econ.Has more traditional gender roles attitudes", 
+        "Econ.Relatively rich", "Aspir.Married or cohabitating", "Aspir.Has one or more children", "Aspir.Lives in a rural area", "Aspir.Enrolled in school", 
+        "Aspir.Subjectively satisfaction with her earnings", "Aspir.Older than 16 when program starts", "Aspir.Attends school regularly", "Aspir.Rarely attends school", "Aspir.Has more traditional gender roles attitudes", 
+        "Aspir.Relatively rich", "COB.Married or cohabitating", "COB.Has one or more children", "COB.Lives in a rural area", "COB.Enrolled in school", 
+        "COB.Subjectively satisfied with her earnings", "COB.Older than 16 when program starts", "COB.Attends school regularly", "COB.Rarely attends school", "COB.Has more traditional gender roles attitudes", 
+        "COB.Relatively rich", "On a scale from 1-Strongly disagree to 100-Strongly agree (50-Undecided),", "Personal Information", "What is your name?", "What is your profession?", 
+        "What organization/s are you affiliated with?", "What is your job position?", "text"))
+surveydata <- as_tibble(surveydata[-1,])
+surveydata[,1:49] <- lapply(surveydata[,1:49], factor)
+
+survey <- read_excel("survey.xlsx", 
+    sheet = "Sheet2")
+
+survey.df <- as.data.frame(t(survey)) %>% 
+  rename("Negative" = V1,
+         "No" = V2,
+         "Positive" = V3,
+         "uncertain" = V4)
+participants <- c(26, 26, 26, 26, 26, 26, 26, 26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26)
+survey.df<- as.data.frame(cbind(survey.df, participants))
+
+#frequencies
+survey.df <- transform(survey.df, "Negative effect" = 100*(survey.df$`Negative`/ participants))
+survey.df <- transform(survey.df, "No effect" = 100*(survey.df$No/ participants))
+survey.df <- transform(survey.df, "Positive effect" = 100*(survey.df$`Positive`/ participants))
+survey.df <- transform(survey.df, "Not sure" = 100*(survey.df$uncertain/ participants))
+survey.df.freq <- survey.df[,6:9]
+survey.df.freq <- round(survey.df.freq, 3)
+
+round_df <- function(x, digits) {
+    numeric_columns <- sapply(x, mode) == 'numeric'
+    x[numeric_columns] <-  round(x[numeric_columns], digits)
+    x
+}
+```
+
+Economic empowerment
+```{r, fig.height=3}
+economic_empower <- ggballoonplot(survey.df.freq[2:11,], fill = "value", main = "Percentage of answers by experts: Estimated effect of indicators on the outcome - Economic empowerment")
+economic_empower + theme(plot.title = element_text(hjust = 0.6))
+```
+
+Aspirations
+```{r, fig.height=3}
+aspirations_effect <- ggballoonplot(survey.df.freq[12:21,], fill = "value", main = "Percentage of answers by experts: Estimated effect of indicators on the outcome: Aspirations", cex=1.5)
+aspirations_effect +theme(plot.title = element_text(hjust = 0.6))
+
+```
+
+Control over body
+```{r, fig.height=3}
+cob_effect <- ggballoonplot(survey.df.freq[22:31,], fill = "value", main = "Percentage of answers by experts: Estimated effect on the outcome: Control Over Body")
+
+cob_effect +theme(plot.title = element_text(hjust = 0.6))
+```
+
+cross comparison of indicators regardless of outcome
+```{r, fig.align='left',fig.width=12}
+#married or cohabiting
+p1 <- ggballoonplot(survey.df.freq[c(2,12,22),], fill = "value")
+#has one or more children
+p2 <- ggballoonplot(survey.df.freq[c(3,13,23),], fill = "value")
+#lives in a rural area
+p3 <- ggballoonplot(survey.df.freq[c(4,14,24),], fill = "value")
+#enrolled in school
+p4 <- ggballoonplot(survey.df.freq[c(5,15,25),], fill = "value")
+#subjectively satisfied with her earnings
+p5 <- ggballoonplot(survey.df.freq[c(6,16,26),], fill = "value")
+#older than 16 when program starts
+p6 <- ggballoonplot(survey.df.freq[c(7,17,27),], fill = "value")
+#attends school regularly
+p7 <- ggballoonplot(survey.df.freq[c(8,18,28),], fill = "value")
+#barely attends school
+p8 <- ggballoonplot(survey.df.freq[c(9,19,29),], fill = "value")
+#has more traditional gender roles attitudes
+p9 <- ggballoonplot(survey.df.freq[c(10,20,30),], fill = "value")
+#relatively rich
+p10 <- ggballoonplot(survey.df.freq[c(11,21,31),], fill = "value")
+
+#putting the plots together on a grid
+grid.arrange(p1, p2, p9, ncol = 2, nrow=2)
+
+grid.arrange(p4, p7, p5, p8, p6, ncol = 2, nrow=3)
+```
+
+```{r, fig.align='left',fig.width=8}
+grid.arrange( p3, p10, ncol = 2, nrow=1)
+```
+
+Estimated effect of indicators for all outcomes
+```{r}
+married <- survey.df.freq[c(2,12,22),]
+married <- cbind(Indicator = rownames(married), married)
+hist.married <-  pivot_longer(married, cols = c(2:5), names_to = "effect")
+hist.married <- round_df(hist.married,1)
+children <- survey.df.freq[c(3,13,23),]
+children <- cbind(Indicator = rownames(children), children)
+hist.children <-  pivot_longer(children, cols = c(2:5), names_to = "effect")
+hist.children <- round_df(hist.children,1)
+rural <- survey.df.freq[c(4,14,24),]
+rural <- cbind(Indicator = rownames(rural), rural)
+hist.rural <-  pivot_longer(rural, cols = c(2:5), names_to = "effect")
+hist.rural <- round_df(hist.rural,1)
+enroll.school <-survey.df.freq[c(5,15,25),]
+enroll.school <- cbind(Indicator = rownames(enroll.school), enroll.school)
+hist.enroll.scool <-  pivot_longer(enroll.school, cols = c(2:5), names_to = "effect")
+hist.enroll.scool <- round_df(hist.enroll.scool,1)
+satisf.income <-survey.df.freq[c(6,16,26),]
+satisf.income <- cbind(Indicator = rownames(satisf.income), satisf.income)
+hist.satisf.income <-  pivot_longer(satisf.income, cols = c(2:5), names_to = "effect")
+hist.satisf.income <- round_df(hist.satisf.income,1)
+older16 <- survey.df.freq[c(7,17,27),]
+older16 <- cbind(Indicator = rownames(older16), older16)
+hist.older16 <-  pivot_longer(older16, cols = c(2:5), names_to = "effect")
+hist.older16 <- round_df(hist.older16,1)
+reg.attend.school <- survey.df.freq[c(8,18,28),]
+reg.attend.school <- cbind(Indicator = rownames(reg.attend.school), reg.attend.school)
+hist.reg.attend.school <-  pivot_longer(reg.attend.school, cols = c(2:5), names_to = "effect")
+hist.reg.attend.school <- round_df(hist.reg.attend.school,1)
+rer.attend.school <- survey.df.freq[c(9,19,29),]
+rer.attend.school <- cbind(Indicator = rownames(rer.attend.school), rer.attend.school)
+hist.rer.attend.school <-  pivot_longer(rer.attend.school, cols = c(2:5), names_to = "effect")
+hist.rer.attend.school <- round_df(hist.rer.attend.school,1)
+traditional.values <- survey.df.freq[c(10,20,30),]
+traditional.values <- cbind(Indicator = rownames(traditional.values), traditional.values)
+hist.traditional.values <-  pivot_longer(traditional.values, cols = c(2:5), names_to = "effect")
+hist.traditional.values <- round_df(hist.traditional.values,1)
+rich <- survey.df.freq[c(11,21,31),]
+rich <- cbind(Indicator = rownames(rich), rich)
+hist.rich <-  pivot_longer(rich, cols = c(2:5), names_to = "effect")
+hist.rich <- round_df(hist.rich,1)
+```
+
+#married across all outcomes
+```{r}
+hist.1 <- ggplot(hist.married, aes(effect, y=value, fill=Indicator)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.5)) +
+  ylim(0,50)+
+  theme_bw() 
+hist.1 + ggtitle( "Percentage of estimated effect of marriage accross all outcomes") + scale_fill_manual(values = c("#E7B800","#52854C", "#00AFBB")) + 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable") 
+```
+#children across all outcomes
+```{r}
+hist.2 <- ggplot(hist.children, aes(effect, y=value, fill=Indicator)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.5)) +
+  ylim(0,50)+
+  theme_bw() 
+hist.2 + ggtitle( "Percentage of estimated effect of having children accross all outcomes") + scale_fill_manual(values = c("#E7B800","#52854C", "#00AFBB")) + 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable") 
+```
+
+#school enrollement
+```{r}
+hist.3 <- ggplot(hist.enroll.scool, aes(effect, y=value, fill=Indicator)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.5)) +
+  ylim(0,50)+
+  theme_bw() 
+hist.3 + ggtitle( "Percentage of estimated effect of school enrollment accross all outcomes") + scale_fill_manual(values = c("#E7B800","#52854C", "#00AFBB")) + 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable") 
+```
+
+```{r}
+hist.4 <- ggplot(hist.older16, aes(effect, y=value, fill=Indicator)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.5)) +
+  ylim(0,50)+
+  theme_bw() 
+hist.4 + ggtitle( "Percentage of estimated effect of age accross all outcomes") + scale_fill_manual(values = c("#E7B800","#52854C", "#00AFBB")) + 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable") 
+```
+#age
+```{r}
+hist.5 <- ggplot(hist.rich, aes(effect, y=value, fill=Indicator)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.5)) +
+  ylim(0,50)+
+  theme_bw() 
+hist.5 + ggtitle( "Percentage of estimated effect of income accross all outcomes") + scale_fill_manual(values = c("#E7B800","#52854C", "#00AFBB")) + 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable") 
+```
+#rural
+```{r}
+hist.6 <- ggplot(hist.rural, aes(effect, y=value, fill=Indicator)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.5)) +
+  ylim(0,50)+
+  theme_bw() 
+hist.6 + ggtitle( "Percentage of estimated effect of living in rural area accross all outcomes") + scale_fill_manual(values = c("#E7B800","#52854C", "#00AFBB")) + 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable") 
+```
+
+#satisfaction with income
+```{r}
+hist.7 <- ggplot(hist.satisf.income, aes(effect, y=value, fill=Indicator)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.5)) +
+  ylim(0,50)+
+  theme_bw() 
+hist.7 + ggtitle( "Percentage of estimated effect of subjective satisfaction with income accross all outcomes") + scale_fill_manual(values = c("#E7B800","#52854C", "#00AFBB")) + 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable") 
+```
+#traditional values
+```{r}
+hist.8 <- ggplot(hist.traditional.values, aes(effect, y=value, fill=Indicator)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.5)) +
+  ylim(0,50)+
+  theme_bw() 
+hist.8 + ggtitle( "Percentage of Estimated Effect of Traditional Values Accross all Outcomes") + scale_fill_manual(values = c("#E7B800","#52854C", "#00AFBB")) + 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+```
+
+Sum estimated effects for indicators on all outcomes
+```{r}
+married <- married %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+married <- married[4,] 
+married <- married[,2:5]/3
+
+children <- children %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+children <- children[4,]
+children <- children[,2:5]/3
+
+rural <- rural %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+rural <- rural[4,]
+rural <- rural[,2:5]/3
+
+enroll.school <- enroll.school %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+enroll.school <- enroll.school[4,]
+enroll.school <- enroll.school[,2:5]/3
+
+satisf.income <- satisf.income %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+satisf.income <- satisf.income[4,]
+satisf.income <- satisf.income[,2:5]/3
+
+older16 <- older16 %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+older16 <- older16[4,]
+older16 <- older16[,2:5]/3
+
+reg.attend.school <- reg.attend.school %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+reg.attend.school <- reg.attend.school[4,]
+reg.attend.school <- reg.attend.school[,2:5]/3
+
+rer.attend.school <- rer.attend.school %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+rer.attend.school <- rer.attend.school[4,]
+rer.attend.school <- rer.attend.school[,2:5]/3
+
+traditional.values <- traditional.values %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+traditional.values <- traditional.values[4,]
+traditional.values <- traditional.values[,2:5]/3
+
+rich <- rich %>% bind_rows(summarise_all(., ~ if(is.numeric(.)) sum(.) else "Total"))
+rich <- rich[4,]
+rich <- rich[,2:5]/3
+```
+
+Plot estimated effects for indicators on all outcomes
+```{r, fig.align='left',fig.width=12}
+mar.effect <- ggballoonplot(married, fill = "value", main = "Estimated effect of marriage")
+child.effect <- ggballoonplot(children, fill = "value", main = "Estimated effect of children")
+rural.effect <- ggballoonplot(rural, fill = "value", main = "Estimated effect of living in rural area")
+enroll.school.effect <- ggballoonplot(enroll.school, fill = "value", main = "Estimated effect of school enrollment")
+satisf.income.effect <- ggballoonplot(satisf.income, fill = "value", main = "Estimated effect of satisfaction with income")
+older16.effect <- ggballoonplot(older16, fill = "value", main = "Estimated effect of being older than 16")
+reg.attend.effect <- ggballoonplot(reg.attend.school, fill = "value", main = "Estimated effect of regular school attendance")
+rer.attend.effect <- ggballoonplot(rer.attend.school, fill = "value", main = "Estimated effect of rare school attendance")
+traditional.values.effect <- ggballoonplot(traditional.values, fill = "value", main = "Estimated effect of having traditional values")
+rich.effect <- ggballoonplot(rich, fill = "value", main = "Estimated effect of being relatively rich")
+```
+
+```{r}
+
+married <- pivot_longer(married, cols = c(1:4), names_to = "prediction")
+married <- round_df(married, 1)
+rich <- pivot_longer(rich, cols = c(1:4), names_to = "prediction")
+children <- pivot_longer(children, cols = c(1:4), names_to = "prediction")
+children <- round_df(children)
+rural <- pivot_longer(rural, cols = c(1:4), names_to = "prediction")
+rural <- round_df(rural, 1)
+enroll.school <-pivot_longer(enroll.school, cols = c(1:4), names_to = "prediction")
+enroll.school <- round_df(enroll.school, 1)
+satisf.income <-pivot_longer(satisf.income, cols = c(1:4), names_to = "prediction")
+satisf.income <- round_df(satisf.income, 1)
+older16 <-pivot_longer(older16, cols = c(1:4), names_to = "prediction")
+older16 <- round_df(older16, 1)
+reg.attend.school <- pivot_longer(reg.attend.school, cols = c(1:4), names_to = "prediction")
+reg.attend.school <- round_df(reg.attend.school, 1)
+rer.attend.school <- pivot_longer(rer.attend.school, cols = c(1:4), names_to = "prediction")
+rer.attend.school <- round_df(rer.attend.school,1)
+traditional.values <-pivot_longer(traditional.values, cols = c(1:4), names_to = "prediction")
+traditional.values <- round_df(traditional.values, 1)
+
+```
+
+```{r}
+freq.1 <- ggplot(married, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3)) +
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.1 + ggtitle( "Percentage of estimated effect of marriage accross all outcomes") + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB")) + 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable") 
+
+
+```
+
+
+```{r}
+freq.2 <- ggplot(rich, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3))+
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.2 +ggtitle("Percentage of estimated effect of being relatively rich accross all outcomes")  + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB"))+ 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+```
+
+
+```{r}
+freq.3 <- ggplot(children, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3)) +
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.3 +ggtitle("Percentage of estimated effect of having children accross all outcomes") + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB"))+ 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+```
+
+
+```{r}
+freq.4 <- ggplot(rural, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3)) +
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.4 +ggtitle("Percentage of estimated effect of living in a rural area accross all outcomes") + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB"))+ 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+```
+
+
+```{r}
+freq.5 <- ggplot(enroll.school, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3)) +
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.5 +ggtitle("Percentage of estimated effect of being enrolled in school accross all outcomes") + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB"))+ 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+```
+
+
+```{r}
+freq.6 <- ggplot(satisf.income, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3)) +
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.6 +ggtitle("Percentage of estimated effect of being satisfied with income accross all outcomes") + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB"))+ 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+```
+
+
+```{r}
+freq.7 <- ggplot(older16, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3)) +
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.7 +ggtitle("Percentage of estimated effect of being older than 16 when program starts accross all outcomes") + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB"))+ 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+```
+
+
+```{r}
+freq.8 <- ggplot(reg.attend.school, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3)) +
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.8 +ggtitle("Percentage of estimated effect of regularly attending school accross all outcomes") + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB"))+ 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+```
+
+
+```{r}
+freq.9 <- ggplot(rer.attend.school, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3)) +
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.9 +ggtitle("Percentage of estimated effect of rarely attending school accross all outcomes") + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB"))+ 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+```
+
+
+```{r}
+freq.10 <- ggplot(traditional.values, aes(prediction, y=value, fill=prediction)) +
+  geom_bar(stat="identity", width = 0.4, position = position_dodge(width=0.3)) +
+  ylim(0,50)+
+  geom_text(aes(label = paste(format(value, nsmall = 0), "%")), vjust = -0.3) + 
+  theme_bw() 
+freq.10 +ggtitle("Percentage of estimated effect of having traditional values accross all outcomes") + scale_fill_manual(values = c("#FC4E07", "#E7B800","#52854C", "#00AFBB"))+ 
+   ylab("Percentage of responses") + xlab("Predicted effect of baseline variable")
+
+```
+
+only income and values
+```{r, fig.align='left',fig.width=9, fig.height=6}
+grid.arrange(rural.effect, rich.effect, satisf.income.effect,  traditional.values.effect,  ncol = 2, nrow=2)
+```
+only family and age
+```{r, fig.align='left',fig.width=9, fig.height=3}
+grid.arrange(mar.effect, child.effect, older16.effect, ncol = 3)
+```
+only School
+```{r, fig.align='left',fig.width=9, fig.height=3}
+grid.arrange(enroll.school.effect, reg.attend.effect, rer.attend.effect, ncol = 3)
+```
+
+Experts countries of residence
+```{r}
+country <- surveydata %>% group_by(country = surveydata$`Country Code`) %>% count(name = "count")
+
+long <- c(53.847818, 14.550072, 133.775136, -74.297333, 10.451526, 40.489673, 2.213749, -3.435973, 34.851612, 12.56738, 69.345116, 22.937506)
+lat <- c(23.424076, 47.516231, 	-25.274398, 4.570868, 51.165691, 9.145, 46.227638, 55.378051, 31.046051, 41.87194, 30.375321, -30.559482)
+```
+
+Plot countries
+```{r, fig.width=5}
+world <- map_data("world")
+
+experts <- ggplot() +
+  geom_map(
+    data = world, map = world,
+    aes(long, lat, map_id = region),
+    color = "white", fill = "lightgray", size = 0.1
+  ) +
+  geom_point(
+    data = country,
+    aes(long, lat, colour = country, size = count),
+    alpha = 0.7
+  ) 
+
+print(experts+ labs(y="Latitude", x = "Longitude", title = "Experts' countries of residence", colour = "Country", size= "Number of Experts") + theme(plot.title = element_text(hjust = 0.5, size = 20)))
+
+```
+
+Plot Experts' affiliation
+```{r, fig.width = 12}
+library(formattable)
+organisation <- surveydata %>% 
+  group_by(Organisation = surveydata$`What is your job position?`) %>% 
+  count(name= "Number of experts") 
+
+formattable(organisation, align =c("l","c"), 
+            list(`Number of experts` = formatter(
+              "span", style = ~ style(color = "darkgreen",font.weight = "bold"))))
+```
+
+
+```{r, fig.width = 12}
+org <- ggplot(data=organisation, aes(x=Organisation, y=count, fill= Organisation, size=count, label.size = 14, show.legend = FALSE)) + geom_bar(position = 'dodge', stat="identity", show.legend = FALSE) + geom_text(aes(label = paste(format(Organisation, nsmall = 0.2), count)), vjust = -0.8, size = 8, position = position_dodge(.5), colour = "black") + theme_transparent() 
+
+org+theme_transparent() +
+  coord_flip() 
+
+```
+
+
+

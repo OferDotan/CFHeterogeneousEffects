@@ -1,0 +1,133 @@
+---
+Title: "Replication Bandiera et al., 2014"
+Authors: "Mariana Saldarriaga and Ofer Dotan"
+Date: "2021"
+---
+
+```{r}
+library(stargazer)
+library(AER)
+library(dplyr)
+library(broom)
+library(tidyr)
+library(knitr)
+library(ivpack)
+library(lmtest)
+```
+
+```{r}
+load("df.uganda.RData")
+```
+
+# ATE outcomes
+```{r}
+ATE_empowerment <- lm(foll_index_empowerment ~ age + as.factor(branchno) +
+                      treatment + as.factor(index_empowerment_quant) + partner +
+                      children + enroll_school + expenditure_goods + rich + empl + rural + 
+                      index_empowerment_quant:enroll_school + index_empowerment_quant:empl+
+                      rural:index_empowerment_quant, 
+                      na.action = na.exclude,
+                      data = df.uganda)
+ATE_expenditure <- lm(foll_expend_goods ~ as.factor(age_quant) + as.factor(branchno) + treatment +
+                      expenditure_goods + rich + partner + index_empowerment_quant + empl +
+                      children + enroll_school + rural + rural:expenditure_goods +
+                      partner:enroll_school + partner:empl + rich:enroll_school +
+                      rich:index_empowerment_quant,
+                      na.action = na.exclude,
+                      data = df.uganda)
+ATE_control_body <- lm(foll_index_controlbody ~ age + as.factor(branchno) + treatment +
+                       index_controlbody + index_empowerment_quant + enroll_school + rural + 
+                       expenditure_goods + rich + index_controlbody:rural +
+                       index_controlbody:age +
+                       index_controlbody:enroll_school,
+                       na.action = na.exclude,
+                       data = df.uganda)
+
+
+# Clustered errors
+SEs_expenditure <- coeftest(ATE_expenditure,
+                            vcov=vcovHC(ATE_expenditure, cluster=df.uganda$vill_id)) 
+SEs_control_body <- coeftest(ATE_control_body,
+                             vcov=vcovHC(ATE_control_body, cluster=df.uganda$vill_id))
+SEs_empowerment <- coeftest(ATE_empowerment,
+                            vcov=vcovHC(ATE_empowerment, cluster=df.uganda$vill_id)) 
+
+# Table shape
+stargazer(ATE_expenditure, ATE_empowerment, ATE_control_body,
+          type = "text",
+          font.type = "Times New Roman",
+          keep = c("treatment"),
+          dep.var.labels = c("Expenditure Goods", "Gender Empowerment", "Control Over Body"),
+          covariate.labels = c("Treatment"),
+          se = list(SEs_expenditure[,2],
+                    SEs_empowerment[,2],
+                    SEs_control_body[,2]), 
+          notes = "Note. Estimate Average Treatment Effect by linear regression on the three outcomes at two-year follow-up. Standard errors in brackets.")
+```
+
+# CATEs -  Expenditure and Empowerment
+```{r}
+# Interaction age
+CATE_emp_age <- lm(foll_index_empowerment ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*age_quant, df.uganda, na.action = na.omit)
+CATE_expend_age <- lm(foll_expend_goods ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*age_quant, df.uganda, na.action = na.omit)
+# Interaction children
+CATE_emp_child <- lm(foll_index_empowerment ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*children, df.uganda, na.action = na.omit)
+CATE_expend_child <- lm(foll_expend_goods ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*children, df.uganda, na.action = na.omit)
+
+# Interaction expenditure
+CATE_emp_expend <- lm(foll_index_empowerment ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*expend_quant,
+                         df.uganda, na.action = na.omit)
+CATE_expend_expend <- lm(foll_expend_goods ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*expend_quant,
+                         df.uganda, na.action = na.omit)
+
+# Interaction enroll school
+CATE_emp_enroll <- lm(foll_index_empowerment ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*enroll_school,
+                         df.uganda, na.action = na.omit)
+CATE_expend_enroll <- lm(foll_expend_goods ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*enroll_school,
+                         df.uganda, na.action = na.omit)
+
+# Interaction gender empowerment
+CATE_emp_empow <- lm(foll_index_empowerment ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*as.factor(index_empowerment_quant),
+                         df.uganda, na.action = na.omit)
+CATE_expend_empow <- lm(foll_expend_goods ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*as.factor(index_empowerment_quant),
+                         df.uganda, na.action = na.omit)
+
+# Interaction rural
+CATE_emp_rural <- lm(foll_index_empowerment ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*rural, df.uganda, na.action = na.omit)
+CATE_expend_rural <- lm(foll_expend_goods ~ as.factor(age_quant) + as.factor(branchno) +
+                         treatment + treatment*rural, df.uganda, na.action = na.omit)
+
+stargazer(CATE_emp_age, CATE_emp_child, CATE_emp_expend, CATE_emp_enroll,
+          CATE_emp_empow,CATE_emp_rural,
+          type = "text",
+          keep = c("treatment", "treatment1:age", "treatment1:children", "treatment1:expend_quant",
+                   "treatment1:enroll_scholl", "treatment1:index_empowerment_quant", "treatment1:rural"),
+          dep.var.labels = c("Expenditure Goods", "Gender Empowerment", "Control Over Body"),
+          covariate.labels = c("Treatment", "Treatment:Age[16-17]", "Treatment:Age[18-28]", "Treatment:Has children",
+                               "Treatment:Medium Expenditure", "Treatment:High Expenditure",
+                               "Treatment:Enrolled School", "Treatment:Empowerment Score[14-43]", "Treatment: Empowerment Score[44-100]",
+                               "Treatmnent:Lives Rural"),
+          notes = "Note. Estimated CATEs by linear regression on dependent variable Expenditure on Goods at two-year follow-up. Standard errors in brackets. All models control for branch number and age. The outcome Expenditure refers to monthly consumption of goods in several goods categories. The variable is measured in UGX currency. Exchange rate was 1,700UGX/1$. See Table 1. for full specification of the outcome. The comparison groups are: model 1 - Age[10-15], model 2 - Has no children, model 3 - Low Expenditure, model 4 - Not enrolled in school, model 5 - Empowerment Score[0-13], model 6 - Lives in urban area.")
+          
+stargazer(CATE_expend_age, CATE_expend_child, CATE_expend_expend, CATE_expend_enroll,
+          CATE_expend_empow, CATE_expend_rural,
+          type = "text",
+          keep = c("treatment", "treatment1:age", "treatment1:children", "treatment1:expenditure_goods",
+                   "treatment1:enroll_scholl", "treatment1:index_empowerment_quant", "treatment1:rural"),
+          dep.var.labels = c("Expenditure Goods", "Gender Empowerment", "Control Over Body"),
+          covariate.labels = c("Treatment"),
+          notes = "Note. Estimated CATEs by linear regression on the three outcomes at two-year follow-up. Standard errors in brackets. All models control for branch number and age. The Gender Empowerment index cummulates answers regarding gender roles (scale 0 to 100). Higher values indicate more empowerment. See Table 1. for full specification of the outcomes. The comparison groups are: model 1 - Age[10-15], model 2 - Has no children, model 3 - Low Expenditure, model 4 - Not enrolled in school, model 5 - Empowerment Score[0-13], model 6 - Lives in urban area.")
+
+```
+
